@@ -1,0 +1,35 @@
+GET http://localhost:3000/ HTTP/1.1
+
+###
+
+POST http://localhost:3000/clientes/5/transacoes HTTP/1.1
+content-type: application/json
+
+{
+  "valor": 1,
+  "tipo": "d",
+  "descricao": "descricaot"
+}
+
+###
+
+GET http://localhost:3001/clientes/s/extrato HTTP/1.1
+
+###
+
+GET http://localhost:9999/ HTTP/1.1
+
+###
+
+POST http://localhost:9999/clientes/ssss/transacoes HTTP/1.1
+content-type: application/json
+
+{
+  "valor": 300,
+  "tipo": "x",
+  "descricao": "descrsadsa"
+}
+
+###
+
+GET http://localhost:9999/clientes/1/extrato HTTP/1.1
