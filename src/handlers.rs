@@ -40,8 +40,6 @@ pub async fn process_transaction(
     customer_id: i32,
     pg_pool: PgPool,
 ) -> Response<Body> {
-    println!("{:?}", request);
-
     if request.valor <= MIN_VALOR {
         return (StatusCode::UNPROCESSABLE_ENTITY, "Valor inválido").into_response();
     }
