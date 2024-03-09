@@ -7,7 +7,7 @@ use axum::{
 
 use chrono::{DateTime, SecondsFormat::Micros, Utc};
 
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 
 use crate::models::*;
 
@@ -20,15 +20,19 @@ pub async fn get_customer_info(
     customer_id: i32,
     db_transaction: &mut sqlx::PgConnection,
 ) -> Result<Cliente, Response<Body>> {
-    let result = sqlx::query_as::<_, Cliente>(
-        "SELECT id, limite, saldo FROM clientes WHERE id = $1 FOR UPDATE",
-    )
-    .bind(customer_id)
-    .fetch_one(db_transaction)
-    .await
-    .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response())?;
+    let result = sqlx::query("SELECT id, limite, saldo FROM clientes WHERE id = $1 FOR UPDATE")
+        .bind(customer_id)
+        .fetch_one(db_transaction)
+        .await;
 
-    Ok(result)
+    match result {
+        Ok(info) => Ok(Cliente {
+            id: info.get(0),
+            limite: info.get(1),
+            saldo: info.get(2),
+        }),
+        Err(_) => Err((StatusCode::NOT_FOUND, "Cliente não encontrado").into_response()),
+    }
 }
 
 pub async fn process_transaction(
@@ -36,6 +40,8 @@ pub async fn process_transaction(
     customer_id: i32,
     pg_pool: PgPool,
 ) -> Response<Body> {
+    println!("{:?}", request);
+
     if request.valor <= MIN_VALOR {
         return (StatusCode::UNPROCESSABLE_ENTITY, "Valor inválido").into_response();
     }
@@ -78,28 +84,28 @@ pub async fn process_transaction(
 
     if customer_info.id != customer_id {
         let _ = db_transaction.rollback().await;
+
         return (StatusCode::NOT_FOUND, "Cliente não encontrado").into_response();
     }
 
-    let novo_saldo: i32 = if request.tipo == TIPO_DEBITO {
-        let saldo_temp = customer_info.saldo - request.valor;
-
-        if saldo_temp < -customer_info.limite {
-            let _ = db_transaction.rollback().await;
-            return (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "Saldo insuficiente para realizar transação",
-            )
-                .into_response();
-        }
-
-        saldo_temp
+    let saldo: i32 = if request.tipo == TIPO_DEBITO {
+        customer_info.saldo - request.valor
     } else {
         customer_info.saldo + request.valor
     };
 
+    if request.tipo == TIPO_DEBITO && saldo < -customer_info.limite {
+        let _ = db_transaction.rollback().await;
+
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "Saldo insuficiente para realizar transação",
+        )
+            .into_response();
+    }
+
     let update_result = sqlx::query("UPDATE clientes SET saldo = $1 WHERE id = $2")
-        .bind(novo_saldo)
+        .bind(saldo)
         .bind(customer_id)
         .execute(&mut *db_transaction)
         .await;
@@ -143,7 +149,7 @@ pub async fn process_transaction(
 
     let response = TransacaoResponse {
         limite: customer_info.limite,
-        saldo: novo_saldo,
+        saldo,
     };
 
     Json(response).into_response()
@@ -155,15 +161,9 @@ pub async fn handler_transaction(
     body: Option<Json<TransacaoRequest>>,
 ) -> impl IntoResponse {
     match body {
-        Some(transacao_request) => {
-            process_transaction(transacao_request, customer_id, pg_pool).await
-        }
-        None => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "Corpo da requisição inválido",
-        )
-            .into_response(),
-    };
+        Some(request) => process_transaction(request, customer_id, pg_pool).await,
+        None => (StatusCode::BAD_REQUEST, "Corpo da requisição inválido").into_response(),
+    }
 }
 
 pub async fn handler_account_statement(
@@ -181,11 +181,12 @@ pub async fn handler_account_statement(
         }
     };
 
-    let transactions: Vec<Transacao> = match sqlx::query_as::<_, Transacao>("SELECT valor, tipo, descricao, realizada_em FROM transacoes WHERE id_cliente = $1 ORDER BY realizada_em DESC LIMIT 10 FOR UPDATE")
+    let transactions = match sqlx::query("SELECT valor, tipo, descricao, realizada_em FROM transacoes WHERE id_cliente = $1 ORDER BY realizada_em DESC LIMIT 10 FOR UPDATE")
         .bind(customer_id)
         .fetch_all(&mut *db_transaction)
         .await {
             Ok(result) => result,
+
             Err(_) => {
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Erro ao buscar transações").into_response();
             }
@@ -194,44 +195,37 @@ pub async fn handler_account_statement(
     let mut transacoes = Vec::new();
 
     for row in transactions {
-        let realizada_em_str: String = row.realizada_em;
-        let realizada_em = match DateTime::parse_from_rfc3339(&realizada_em_str) {
-            Ok(dt) => dt.with_timezone(&Utc),
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Erro ao parsear data e hora: {}", e),
-                )
-                    .into_response();
-            }
-        };
+        let realizada_em: DateTime<Utc> = row.get(3);
 
         transacoes.push(Transacao {
-            valor: row.valor,
-            tipo: row.tipo,
-            descricao: row.descricao,
-            realizada_em: realizada_em.to_rfc3339_opts(Micros, true),
+            valor: row.get(0),
+            tipo: row.get(1),
+            descricao: row.get(2),
+            realizada_em: realizada_em.to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
         });
     }
 
-    let customer_info: Cliente =
-        match sqlx::query_as("SELECT saldo, limite FROM clientes WHERE id = $1 FOR UPDATE")
+    let cliente: Cliente =
+        match sqlx::query("SELECT saldo, limite FROM clientes WHERE id = $1 FOR UPDATE")
             .bind(customer_id)
             .fetch_one(&mut *db_transaction)
             .await
         {
-            Ok(info) => info,
+            Ok(info) => Cliente {
+                id: customer_id,
+                saldo: info.get(0),
+                limite: info.get(1),
+            },
             Err(_) => {
-                let _ = db_transaction.rollback().await;
                 return (StatusCode::NOT_FOUND, "Cliente não encontrado").into_response();
             }
         };
 
     let response = ExtratoResponse {
         saldo: Saldo {
-            total: customer_info.saldo,
+            total: cliente.saldo,
             data_extrato: Utc::now().to_rfc3339_opts(Micros, true).to_string(),
-            limite: customer_info.limite,
+            limite: cliente.limite,
         },
         ultimas_transacoes: transacoes,
     };

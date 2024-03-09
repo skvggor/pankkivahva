@@ -4,8 +4,8 @@ pub async fn connect() -> Result<PgPool, sqlx::Error> {
     let url = "postgres://user:password@localhost:5432/pankkivahva";
 
     let pool = PgPoolOptions::new()
-        .test_before_acquire(false)
-        .max_connections(100)
+        .max_connections(10)
+        .min_connections(1)
         .connect(url)
         .await?;
 

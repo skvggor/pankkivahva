@@ -13,7 +13,7 @@ content-type: application/json
 
 ###
 
-GET http://localhost:3001/clientes/s/extrato HTTP/1.1
+GET http://localhost:3001/clientes/1/extrato HTTP/1.1
 
 ###
 
@@ -25,9 +25,9 @@ POST http://localhost:9999/clientes/1/transacoes HTTP/1.1
 content-type: application/json
 
 {
-  "valor": 22,
+  "valor": -1111,
   "tipo": "c",
-  "descricao": "descrsadsa"
+  "descricao": "sdsadsadasdjsahdjksajkdhsakjh"
 }
 
 ###
