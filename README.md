@@ -5,7 +5,9 @@
 <h1 align="center"><b>PANKKIVAHVA</b></h1>
 
 <p align="center">
-  <i>An application to improve my skills in the Rust language.</i>
+  <i>An application to improve my skills in the Rust.</i>
+  <br><br>
+  <img src="https://wakatime.com/badge/user/6fd82e7b-8d36-4419-85dc-58cd397667a8/project/018dd8cd-b7ad-496c-a70b-e39ba64687f3.svg" alt="Time" />
 </p>
 
 ---
