@@ -21,12 +21,12 @@ GET http://localhost:9999/ HTTP/1.1
 
 ###
 
-POST http://localhost:9999/clientes/ssss/transacoes HTTP/1.1
+POST http://localhost:9999/clientes/1/transacoes HTTP/1.1
 content-type: application/json
 
 {
-  "valor": 300,
-  "tipo": "x",
+  "valor": 22,
+  "tipo": "c",
   "descricao": "descrsadsa"
 }
 

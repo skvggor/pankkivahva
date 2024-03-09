@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+use sqlx::prelude::FromRow;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, FromRow)]
 pub struct Cliente {
     pub id: i32,
     pub limite: i32,
@@ -21,7 +22,7 @@ pub struct TransacaoRequest {
     pub descricao: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, FromRow)]
 pub struct Transacao {
     pub valor: i32,
     pub tipo: String,

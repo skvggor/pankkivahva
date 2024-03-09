@@ -5,7 +5,6 @@ mod models;
 use crate::handlers::*;
 
 use axum::{
-    extract::Path,
     http::Error,
     routing::{get, post},
     Router,
