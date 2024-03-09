@@ -1,8 +1,9 @@
 mod db;
 mod handlers;
+mod messages;
 mod models;
 
-use crate::handlers::*;
+use crate::handlers::{handler_account_statement, handler_transaction};
 
 use axum::{
     http::Error,
@@ -35,8 +36,6 @@ async fn main() -> Result<(), Error> {
         .unwrap();
 
     axum::serve(listener, app).await.unwrap();
-
-    println!("Server running on port {}", port);
 
     Ok(())
 }

@@ -9,6 +9,7 @@ use chrono::{DateTime, SecondsFormat::Micros, Utc};
 
 use sqlx::{PgPool, Row};
 
+use crate::messages::*;
 use crate::models::*;
 
 const MIN_DESCRICAO_LENGTH: usize = 10;
@@ -31,7 +32,7 @@ pub async fn get_customer_info(
             limite: info.get(1),
             saldo: info.get(2),
         }),
-        Err(_) => Err((StatusCode::NOT_FOUND, "Cliente não encontrado").into_response()),
+        Err(_) => Err((StatusCode::NOT_FOUND, CLIENTE_NAO_ENCONTRADO).into_response()),
     }
 }
 
@@ -41,33 +42,21 @@ pub async fn process_transaction(
     pg_pool: PgPool,
 ) -> Response<Body> {
     if request.valor <= MIN_VALOR {
-        return (StatusCode::UNPROCESSABLE_ENTITY, "Valor inválido").into_response();
+        return (StatusCode::UNPROCESSABLE_ENTITY, VALOR_INVALIDO).into_response();
     }
 
     if request.tipo != TIPO_CREDITO && request.tipo != TIPO_DEBITO {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "Tipo de transação inválida",
-        )
-            .into_response();
+        return (StatusCode::UNPROCESSABLE_ENTITY, TIPO_DE_TRANSACAO_INVALIDA).into_response();
     }
 
     if request.descricao.is_empty() || request.descricao.len() > MIN_DESCRICAO_LENGTH {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "Descrição inválida! Deve possuir 1 à 10 caracteres",
-        )
-            .into_response();
+        return (StatusCode::UNPROCESSABLE_ENTITY, DESCRICAO_INVALIDA).into_response();
     }
 
     let mut db_transaction = match pg_pool.begin().await {
         Ok(current_transaction) => current_transaction,
         Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Erro ao iniciar transação",
-            )
-                .into_response()
+            return (StatusCode::INTERNAL_SERVER_ERROR, ERRO_INICIAR_TRANSACAO).into_response()
         }
     };
 
@@ -76,14 +65,14 @@ pub async fn process_transaction(
         Err(_) => {
             let _ = db_transaction.rollback().await;
 
-            return (StatusCode::NOT_FOUND, "Cliente não encontrado").into_response();
+            return (StatusCode::NOT_FOUND, CLIENTE_NAO_ENCONTRADO).into_response();
         }
     };
 
     if customer_info.id != customer_id {
         let _ = db_transaction.rollback().await;
 
-        return (StatusCode::NOT_FOUND, "Cliente não encontrado").into_response();
+        return (StatusCode::NOT_FOUND, CLIENTE_NAO_ENCONTRADO).into_response();
     }
 
     let saldo: i32 = if request.tipo == TIPO_DEBITO {
@@ -95,11 +84,7 @@ pub async fn process_transaction(
     if request.tipo == TIPO_DEBITO && saldo < -customer_info.limite {
         let _ = db_transaction.rollback().await;
 
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "Saldo insuficiente para realizar transação",
-        )
-            .into_response();
+        return (StatusCode::UNPROCESSABLE_ENTITY, SALDO_INSUFICIENTE).into_response();
     }
 
     let update_result = sqlx::query("UPDATE clientes SET saldo = $1 WHERE id = $2")
@@ -113,7 +98,7 @@ pub async fn process_transaction(
 
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Erro ao atualizar saldo do cliente",
+            ERRO_ATUALIZAR_SALDO_CLIENTE,
         )
             .into_response();
     }
@@ -130,19 +115,11 @@ pub async fn process_transaction(
     if (insert_result).is_err() {
         let _ = db_transaction.rollback().await;
 
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Erro ao inserir transação",
-        )
-            .into_response();
+        return (StatusCode::INTERNAL_SERVER_ERROR, ERRO_INSERIR_TRANSACAO).into_response();
     }
 
     if (db_transaction.commit().await).is_err() {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Erro ao finalizar transação",
-        )
-            .into_response();
+        return (StatusCode::INTERNAL_SERVER_ERROR, ERRO_FINALIZAR_TRANSACAO).into_response();
     }
 
     let response = TransacaoResponse {
@@ -160,7 +137,7 @@ pub async fn handler_transaction(
 ) -> impl IntoResponse {
     match body {
         Some(request) => process_transaction(request, customer_id, pg_pool).await,
-        None => (StatusCode::BAD_REQUEST, "Corpo da requisição inválido").into_response(),
+        None => (StatusCode::BAD_REQUEST, CORPO_INVALIDO).into_response(),
     }
 }
 
@@ -171,11 +148,7 @@ pub async fn handler_account_statement(
     let mut db_transaction = match pg_pool.begin().await {
         Ok(current_transaction) => current_transaction,
         Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Erro ao iniciar transação",
-            )
-                .into_response()
+            return (StatusCode::INTERNAL_SERVER_ERROR, ERRO_INICIAR_TRANSACAO).into_response()
         }
     };
 
@@ -186,7 +159,7 @@ pub async fn handler_account_statement(
             Ok(result) => result,
 
             Err(_) => {
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Erro ao buscar transações").into_response();
+                return (StatusCode::INTERNAL_SERVER_ERROR, ERRO_BUSCAR_EXTRATO).into_response();
             }
         };
 
@@ -215,7 +188,7 @@ pub async fn handler_account_statement(
                 limite: info.get(1),
             },
             Err(_) => {
-                return (StatusCode::NOT_FOUND, "Cliente não encontrado").into_response();
+                return (StatusCode::NOT_FOUND, CLIENTE_NAO_ENCONTRADO).into_response();
             }
         };
 
@@ -229,11 +202,7 @@ pub async fn handler_account_statement(
     };
 
     if (db_transaction.commit().await).is_err() {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Erro ao finalizar transação",
-        )
-            .into_response();
+        return (StatusCode::INTERNAL_SERVER_ERROR, ERRO_FINALIZAR_TRANSACAO).into_response();
     }
 
     Json(response).into_response()
